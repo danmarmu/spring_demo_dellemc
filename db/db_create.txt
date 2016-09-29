@@ -1,0 +1,12 @@
+--------------
+CREATE DATABASE glic_cio_demo
+--------------
+
+--------------
+CREATE USER 'glic_cio_demo'@'localhost' IDENTIFIED BY 'glic_cio_demo'
+--------------
+
+--------------
+GRANT ALL PRIVILEGES ON glic_cio_demo.* TO 'glic_cio_demo'@'localhost'
+--------------
+

@@ -1,0 +1,91 @@
+#terraform remote config -backend=s3 -backend-config="bucket=terraform-glic" -backend-config="key=test-demo-app/terraform.tfstate" -backend-config="region=us-east-1"
+
+provider "aws" {
+  region = "${var.aws_region}"
+}
+
+resource "aws_elb" "example" {
+  name = "terraform-asg-deployment-example"
+  subnets = ["${var.subnet1}", "${var.subnet2}"]
+  security_groups = ["${aws_security_group.example.id}"]
+  cross_zone_load_balancing = true
+  listener {
+    instance_port = 8080
+    instance_protocol = "tcp"
+    lb_port = 80
+    lb_protocol = "tcp"
+  }
+  health_check {
+    healthy_threshold = 2
+    unhealthy_threshold = 2
+    timeout = 2
+    target = "TCP:22"
+    interval = 5
+  }
+
+  tags {
+    Name = "terraform-asg-deployment-example"
+  }
+}
+
+resource "aws_autoscaling_group" "asg_app" {
+  lifecycle { create_before_destroy = true }
+
+  availability_zones = ["${var.az1}", "${var.az2}"]
+  name = "asg-app - ${aws_launch_configuration.lc_app.name}"
+  max_size = 5
+  min_size = 2
+  wait_for_elb_capacity = 2
+  desired_capacity = 2
+  health_check_grace_period = 300
+  health_check_type = "ELB"
+  launch_configuration = "${aws_launch_configuration.lc_app.id}"
+  load_balancers = ["${aws_elb.example.name}"]
+  vpc_zone_identifier = ["${var.subnet1}", "${var.subnet2}"]
+
+  tag {
+    key = "Name"
+    value = "app${count.index}"
+    propagate_at_launch = true
+  }
+}
+
+resource "aws_launch_configuration" "lc_app" {
+    lifecycle { create_before_destroy = true }
+
+    image_id = "${var.ami}"
+    instance_type = "${var.instance_type}"
+    key_name = "${var.keypair}"
+    security_groups = ["${aws_security_group.example.id}"]
+
+    user_data = "${file("${path.module}/userdata.sh")}"
+
+    lifecycle {
+      create_before_destroy = true
+    }
+}
+
+resource "aws_security_group" "example" {
+  name = "example_sg_allow_all"
+  description = "example_sg_allow_all"
+  vpc_id = "${var.vpc_id}"
+
+  ingress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+      from_port = 0
+      to_port = 0
+      protocol = "-1"
+      cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+output "dns_name" {
+  value = "${aws_elb.example.dns_name}"
+}
+
